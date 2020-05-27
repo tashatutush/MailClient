@@ -1,6 +1,7 @@
 package app;
 
 import java.io.BufferedReader;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.security.InvalidAlgorithmParameterException;
@@ -22,12 +23,13 @@ import javax.mail.internet.MimeMessage;
 
 import org.apache.xml.security.utils.JavaUtils;
 
+import com.google.api.client.repackaged.org.apache.commons.codec.binary.Base64;
 import com.google.api.services.gmail.Gmail;
 import com.google.api.services.gmail.model.Message;
 
 import support.MailHelper;
 import support.MailReader;
-import util.Base64;
+//import util.Base64;
 import util.GzipUtil;
 
 public class ReadMailClient extends MailClient {
@@ -81,27 +83,45 @@ public class ReadMailClient extends MailClient {
 		Cipher aesCipherDec = Cipher.getInstance("AES/CBC/PKCS5Padding");
 		SecretKey secretKey = new SecretKeySpec(JavaUtils.getBytesFromFile(KEY_FILE), "AES");
 		
+		// Dekriptivanje subject-a i body-ja
+		String subject = extractSubject(aesCipherDec, secretKey, chosenMessage);
+		String body = extractBodyText(aesCipherDec, secretKey, chosenMessage);
+		System.out.println("Subject text: " + new String(subject));
+		System.out.println("Body text: " + body);
+	}
+	
+	private static String extractBodyText(Cipher aesCipherDec, SecretKey secretKey, MimeMessage chosenMessage) 
+			throws IOException, IllegalBlockSizeException, BadPaddingException, MessagingException, InvalidKeyException, InvalidAlgorithmParameterException {
 		
+		// Iscitavanje IV-a iz fajla
 		byte[] iv1 = JavaUtils.getBytesFromFile(IV1_FILE);
 		IvParameterSpec ivParameterSpec1 = new IvParameterSpec(iv1);
+		
+		//Inicijalizacija za dekriptovanje
 		aesCipherDec.init(Cipher.DECRYPT_MODE, secretKey, ivParameterSpec1);
 		
 		String str = MailHelper.getText(chosenMessage);
-		byte[] bodyEnc = Base64.decode(str);
+		byte[] bodyEnc = Base64.decodeBase64(str);
 		
 		String receivedBodyTxt = new String(aesCipherDec.doFinal(bodyEnc));
-		String decompressedBodyText = GzipUtil.decompress(Base64.decode(receivedBodyTxt));
-		System.out.println("Body text: " + decompressedBodyText);
+		String decompressedBodyText = GzipUtil.decompress(Base64.decodeBase64(receivedBodyTxt));
+		return decompressedBodyText;
+	}
+	
+	private static String extractSubject(Cipher aesCipherDec, SecretKey secretKey, MimeMessage chosenMessage) 
+			throws FileNotFoundException, IOException, InvalidKeyException, InvalidAlgorithmParameterException, 
+			IllegalBlockSizeException, BadPaddingException, MessagingException {
 		
-		
+		// Iscitavanje IV-a iz fajla
 		byte[] iv2 = JavaUtils.getBytesFromFile(IV2_FILE);
 		IvParameterSpec ivParameterSpec2 = new IvParameterSpec(iv2);
+		
 		//inicijalizacija za dekriptovanje
 		aesCipherDec.init(Cipher.DECRYPT_MODE, secretKey, ivParameterSpec2);
 		
 		//dekompresovanje i dekriptovanje subject-a
-		String decryptedSubjectTxt = new String(aesCipherDec.doFinal(Base64.decode(chosenMessage.getSubject())));
-		String decompressedSubjectTxt = GzipUtil.decompress(Base64.decode(decryptedSubjectTxt));
-		System.out.println("Subject text: " + new String(decompressedSubjectTxt));
+		String decryptedSubjectTxt = new String(aesCipherDec.doFinal(Base64.decodeBase64(chosenMessage.getSubject())));
+		String decompressedSubjectTxt = GzipUtil.decompress(Base64.decodeBase64(decryptedSubjectTxt));
+		return decompressedSubjectTxt;
 	}
 }
