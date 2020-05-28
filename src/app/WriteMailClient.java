@@ -1,10 +1,20 @@
 package app;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
+import java.security.PublicKey;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateException;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
@@ -18,6 +28,7 @@ import org.apache.xml.security.utils.JavaUtils;
 
 import com.google.api.services.gmail.Gmail;
 
+import model.mailclient.MailBody;
 import util.Base64;
 import util.GzipUtil;
 import util.IVHelper;
@@ -53,14 +64,30 @@ public class WriteMailClient extends MailClient {
 			//snimaju se bajtovi kljuca.
 			JavaUtils.writeBytesToFilename(KEY_FILE, secretKey.getEncoded());
 			
-			// Enkripcija subject-a i body-ja
-			String ciphersubjectStr = encryptSubject(subject, aesCipherEnc, secretKey);
-			String ciphertextStr = encryptBody(body, aesCipherEnc, secretKey);
-			System.out.println("Kriptovan subject: " + ciphersubjectStr);
-			System.out.println("Kriptovan tekst: " + ciphertextStr);
+			// kreiranje inicijalizacionih vektora
+			IvParameterSpec ivParameterSubject = IVHelper.createIV();
+			IvParameterSpec ivParameterBody = IVHelper.createIV();
 			
-			// Slanje maila
-        	MimeMessage mimeMessage = MailHelper.createMimeMessage(reciever, ciphersubjectStr, ciphertextStr);
+			// Enkripcija subject-a i body-ja
+			String ciphersubjectStr = encryptSubject(ivParameterSubject, subject, aesCipherEnc, secretKey);
+			byte[] ciphertext = encryptBody(ivParameterBody, body, aesCipherEnc, secretKey);
+			
+			//dobavljanje javnog kljuca usera B
+			PublicKey userBpublicKey = getUserBpublicKey();
+			
+			//ENKRIPCIJA TAJNOG KLJUCA RSA algoritmom sa javnim kljucem user-a B
+			//inicijalizacija
+			Cipher rsaCipherEnc = Cipher.getInstance("RSA/ECB/PKCS1Padding");
+			rsaCipherEnc.init(Cipher.ENCRYPT_MODE, userBpublicKey);
+			//enkripcija
+			byte [] encSecretKey = rsaCipherEnc.doFinal(secretKey.getEncoded());
+
+			// Priprema maila
+			MailBody mailBody = new MailBody(ciphertext, ivParameterSubject.getIV(), ivParameterBody.getIV(), encSecretKey);
+			String mailBodyCSV = mailBody.toCSV();
+        	MimeMessage mimeMessage = MailHelper.createMimeMessage(reciever, ciphersubjectStr, mailBodyCSV);
+        	
+			//slanje maila
         	MailWritter.sendMessage(service, "me", mimeMessage);
         	
         }catch (Exception e) {
@@ -68,38 +95,50 @@ public class WriteMailClient extends MailClient {
 		}
 	}
 	
-	private static String encryptBody(String body, Cipher aesCipherEnc, SecretKey secretKey) 
+	private static byte[] encryptBody(IvParameterSpec ivParameterBody, String body, Cipher aesCipherEnc, SecretKey secretKey) 
 			throws IOException, InvalidKeyException, InvalidAlgorithmParameterException, IllegalBlockSizeException, BadPaddingException {
 		
 		// Kompresija i enkodovanje
 		String compressedBody = Base64.encodeToString(GzipUtil.compress(body));
 		
 		//inicijalizacija za sifrovanje 
-		IvParameterSpec ivParameterSpec1 = IVHelper.createIV();
-		aesCipherEnc.init(Cipher.ENCRYPT_MODE, secretKey, ivParameterSpec1);
+		aesCipherEnc.init(Cipher.ENCRYPT_MODE, secretKey, ivParameterBody);
 		
 		//snimaju se bajtovi IV-a.
-		JavaUtils.writeBytesToFilename(IV1_FILE, ivParameterSpec1.getIV());
+		JavaUtils.writeBytesToFilename(IV1_FILE, ivParameterBody.getIV());
 		
 		//sifrovanje
-		byte[] ciphertext = aesCipherEnc.doFinal(compressedBody.getBytes());
-		return Base64.encodeToString(ciphertext);
+		return aesCipherEnc.doFinal(compressedBody.getBytes());
+
 	}
 	
-	private static String encryptSubject(String subject, Cipher aesCipherEnc, SecretKey secretKey) 
+	private static String encryptSubject(IvParameterSpec ivParameterSubject, String subject, Cipher aesCipherEnc, SecretKey secretKey) 
 			throws IOException, InvalidKeyException, InvalidAlgorithmParameterException, IllegalBlockSizeException, BadPaddingException {
 		
 		// Kompresija i enkodovanje
 		String compressedSubject = Base64.encodeToString(GzipUtil.compress(subject));
 		
 		//inicijalizacija za sifrovanje 
-		IvParameterSpec ivParameterSpec2 = IVHelper.createIV();
-		aesCipherEnc.init(Cipher.ENCRYPT_MODE, secretKey, ivParameterSpec2);
+		aesCipherEnc.init(Cipher.ENCRYPT_MODE, secretKey, ivParameterSubject);
 		
 		//snimaju se bajtovi IV-a.
-		JavaUtils.writeBytesToFilename(IV2_FILE, ivParameterSpec2.getIV());
+		JavaUtils.writeBytesToFilename(IV2_FILE, ivParameterSubject.getIV());
 		
 		byte[] ciphersubject = aesCipherEnc.doFinal(compressedSubject.getBytes());
 		return Base64.encodeToString(ciphersubject);
+	}
+	
+	private static PublicKey getUserBpublicKey() throws KeyStoreException, NoSuchProviderException, 
+	NoSuchAlgorithmException, CertificateException, FileNotFoundException, IOException {
+		
+		//kreiranje keystore instance
+		KeyStore ksInstanca = KeyStore.getInstance("JKS", "SUN");
+		//inicijalizacija keystore instance
+		File file = new File("./data/usera.jks");
+		ksInstanca.load(new FileInputStream(file), "usera".toCharArray());
+		//citanje sertifikata iz keystore-a
+		Certificate cer = ksInstanca.getCertificate("userb");
+		//citanje javnog kljuca usera B iz sertifikata
+		return cer.getPublicKey();
 	}
 }
