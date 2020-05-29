@@ -24,8 +24,6 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.IvParameterSpec;
 import javax.mail.internet.MimeMessage;
 
-import org.apache.xml.security.utils.JavaUtils;
-
 import com.google.api.services.gmail.Gmail;
 
 import model.mailclient.MailBody;
@@ -36,10 +34,6 @@ import support.MailHelper;
 import support.MailWritter;
 
 public class WriteMailClient extends MailClient {
-
-	private static final String KEY_FILE = "./data/session.key";
-	private static final String IV1_FILE = "./data/iv1.bin";
-	private static final String IV2_FILE = "./data/iv2.bin";
 	
 	public static void main(String[] args) {
 		
@@ -60,9 +54,6 @@ public class WriteMailClient extends MailClient {
             KeyGenerator keyGen = KeyGenerator.getInstance("AES"); 
 			SecretKey secretKey = keyGen.generateKey();
 			Cipher aesCipherEnc = Cipher.getInstance("AES/CBC/PKCS5Padding");
-			
-			//snimaju se bajtovi kljuca.
-			JavaUtils.writeBytesToFilename(KEY_FILE, secretKey.getEncoded());
 			
 			// kreiranje inicijalizacionih vektora
 			IvParameterSpec ivParameterSubject = IVHelper.createIV();
@@ -104,9 +95,6 @@ public class WriteMailClient extends MailClient {
 		//inicijalizacija za sifrovanje 
 		aesCipherEnc.init(Cipher.ENCRYPT_MODE, secretKey, ivParameterBody);
 		
-		//snimaju se bajtovi IV-a.
-		JavaUtils.writeBytesToFilename(IV1_FILE, ivParameterBody.getIV());
-		
 		//sifrovanje
 		return aesCipherEnc.doFinal(compressedBody.getBytes());
 
@@ -120,9 +108,6 @@ public class WriteMailClient extends MailClient {
 		
 		//inicijalizacija za sifrovanje 
 		aesCipherEnc.init(Cipher.ENCRYPT_MODE, secretKey, ivParameterSubject);
-		
-		//snimaju se bajtovi IV-a.
-		JavaUtils.writeBytesToFilename(IV2_FILE, ivParameterSubject.getIV());
 		
 		byte[] ciphersubject = aesCipherEnc.doFinal(compressedSubject.getBytes());
 		return Base64.encodeToString(ciphersubject);

@@ -1,12 +1,20 @@
 package app;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
+import java.security.PrivateKey;
+import java.security.UnrecoverableKeyException;
+import java.security.cert.CertificateException;
 import java.security.spec.InvalidKeySpecException;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,15 +29,13 @@ import javax.crypto.spec.SecretKeySpec;
 import javax.mail.MessagingException;
 import javax.mail.internet.MimeMessage;
 
-import org.apache.xml.security.utils.JavaUtils;
-
 import com.google.api.client.repackaged.org.apache.commons.codec.binary.Base64;
 import com.google.api.services.gmail.Gmail;
 import com.google.api.services.gmail.model.Message;
 
+import model.mailclient.MailBody;
 import support.MailHelper;
 import support.MailReader;
-//import util.Base64;
 import util.GzipUtil;
 
 public class ReadMailClient extends MailClient {
@@ -37,11 +43,10 @@ public class ReadMailClient extends MailClient {
 	public static long PAGE_SIZE = 3;
 	public static boolean ONLY_FIRST_PAGE = true;
 	
-	private static final String KEY_FILE = "./data/session.key";
-	private static final String IV1_FILE = "./data/iv1.bin";
-	private static final String IV2_FILE = "./data/iv2.bin";
-	
-	public static void main(String[] args) throws IOException, InvalidKeyException, NoSuchAlgorithmException, InvalidKeySpecException, IllegalBlockSizeException, BadPaddingException, MessagingException, NoSuchPaddingException, InvalidAlgorithmParameterException {
+	public static void main(String[] args) 
+			throws IOException, InvalidKeyException, NoSuchAlgorithmException, InvalidKeySpecException, IllegalBlockSizeException, BadPaddingException, 
+			MessagingException, NoSuchPaddingException, InvalidAlgorithmParameterException, UnrecoverableKeyException, KeyStoreException, 
+			NoSuchProviderException, CertificateException {
         // Build a new authorized API client service.
         Gmail service = getGmailService();
         ArrayList<MimeMessage> mimeMessages = new ArrayList<MimeMessage>();
@@ -79,49 +84,70 @@ public class ReadMailClient extends MailClient {
 	    
 		MimeMessage chosenMessage = mimeMessages.get(answer);
 	    
-        //TODO: Decrypt a message and decompress it. The private key is stored in a file.
+		//preuzimanje enkriptovane poruke
+		String mailBodyCSV = MailHelper.getText(chosenMessage);
+		MailBody mailBody = new MailBody(mailBodyCSV);
+		byte[] encBody = mailBody.getEncMessageBytes();
+		byte[] IV1 = mailBody.getIV1Bytes();
+		byte[] IV2 = mailBody.getIV2Bytes();
+		byte[] encSecretKey = mailBody.getEncKeyBytes();
+		
+		//dekripcija tajnog kljuca
+		SecretKey secretKey = decryptSecretKey(encSecretKey);
+		
 		Cipher aesCipherDec = Cipher.getInstance("AES/CBC/PKCS5Padding");
-		SecretKey secretKey = new SecretKeySpec(JavaUtils.getBytesFromFile(KEY_FILE), "AES");
 		
 		// Dekriptivanje subject-a i body-ja
-		String subject = extractSubject(aesCipherDec, secretKey, chosenMessage);
-		String body = extractBodyText(aesCipherDec, secretKey, chosenMessage);
+		String subject = decryptSubject(aesCipherDec, secretKey, chosenMessage.getSubject(), IV1);
+		String body = decryptBody(aesCipherDec, secretKey, encBody, IV2);
 		System.out.println("Subject text: " + new String(subject));
 		System.out.println("Body text: " + body);
 	}
 	
-	private static String extractBodyText(Cipher aesCipherDec, SecretKey secretKey, MimeMessage chosenMessage) 
+	private static String decryptBody(Cipher aesCipherDec, SecretKey secretKey, byte[] encBody, byte[] IV2) 
 			throws IOException, IllegalBlockSizeException, BadPaddingException, MessagingException, InvalidKeyException, InvalidAlgorithmParameterException {
 		
-		// Iscitavanje IV-a iz fajla
-		byte[] iv1 = JavaUtils.getBytesFromFile(IV1_FILE);
-		IvParameterSpec ivParameterSpec1 = new IvParameterSpec(iv1);
+		IvParameterSpec ivParameterBody = new IvParameterSpec(IV2);
 		
 		//Inicijalizacija za dekriptovanje
-		aesCipherDec.init(Cipher.DECRYPT_MODE, secretKey, ivParameterSpec1);
+		aesCipherDec.init(Cipher.DECRYPT_MODE, secretKey, ivParameterBody);
 		
-		String str = MailHelper.getText(chosenMessage);
-		byte[] bodyEnc = Base64.decodeBase64(str);
-		
-		String receivedBodyTxt = new String(aesCipherDec.doFinal(bodyEnc));
+		String receivedBodyTxt = new String(aesCipherDec.doFinal(encBody));
 		String decompressedBodyText = GzipUtil.decompress(Base64.decodeBase64(receivedBodyTxt));
 		return decompressedBodyText;
 	}
 	
-	private static String extractSubject(Cipher aesCipherDec, SecretKey secretKey, MimeMessage chosenMessage) 
-			throws FileNotFoundException, IOException, InvalidKeyException, InvalidAlgorithmParameterException, 
-			IllegalBlockSizeException, BadPaddingException, MessagingException {
+	private static String decryptSubject(Cipher aesCipherDec, SecretKey secretKey, String subjectEnc, byte[] IV1) 
+			throws InvalidKeyException, InvalidAlgorithmParameterException, IllegalBlockSizeException, BadPaddingException, IOException {
 		
-		// Iscitavanje IV-a iz fajla
-		byte[] iv2 = JavaUtils.getBytesFromFile(IV2_FILE);
-		IvParameterSpec ivParameterSpec2 = new IvParameterSpec(iv2);
+		IvParameterSpec ivParameterSubject = new IvParameterSpec(IV1);
 		
 		//inicijalizacija za dekriptovanje
-		aesCipherDec.init(Cipher.DECRYPT_MODE, secretKey, ivParameterSpec2);
+		aesCipherDec.init(Cipher.DECRYPT_MODE, secretKey, ivParameterSubject);
 		
 		//dekompresovanje i dekriptovanje subject-a
-		String decryptedSubjectTxt = new String(aesCipherDec.doFinal(Base64.decodeBase64(chosenMessage.getSubject())));
+		String decryptedSubjectTxt = new String(aesCipherDec.doFinal(Base64.decodeBase64(subjectEnc)));
 		String decompressedSubjectTxt = GzipUtil.decompress(Base64.decodeBase64(decryptedSubjectTxt));
 		return decompressedSubjectTxt;
+	}
+	
+	private static SecretKey decryptSecretKey(byte[] encSecretKey) 
+			throws KeyStoreException, NoSuchProviderException, NoSuchAlgorithmException, CertificateException, FileNotFoundException, 
+			IOException, UnrecoverableKeyException, NoSuchPaddingException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException  {
+		
+		//kreiranje keystore instance
+		KeyStore ksInstanca = KeyStore.getInstance("JKS", "SUN");
+		//inicijalizacija keystore instance
+		File file = new File("./data/userb.jks");
+		ksInstanca.load(new FileInputStream(file), "userb".toCharArray());
+		//citanje privatnog kljuca usera B
+		PrivateKey prKey = (PrivateKey) ksInstanca.getKey("userb", "userb".toCharArray());
+		
+		Cipher rsaCipherDec = Cipher.getInstance("RSA/ECB/PKCS1Padding");
+		rsaCipherDec.init(Cipher.DECRYPT_MODE, prKey);
+		byte[] decSecretKey = rsaCipherDec.doFinal(encSecretKey);
+		
+		SecretKey secretKey = new SecretKeySpec(decSecretKey, "AES");
+		return secretKey;	
 	}
 }
