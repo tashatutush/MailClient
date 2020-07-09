@@ -12,7 +12,9 @@ import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
+import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.security.UnrecoverableKeyException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 
@@ -27,6 +29,7 @@ import javax.mail.internet.MimeMessage;
 import com.google.api.services.gmail.Gmail;
 
 import model.mailclient.MailBody;
+import signature.SignatureManager;
 import util.Base64;
 import util.GzipUtil;
 import util.IVHelper;
@@ -72,9 +75,13 @@ public class WriteMailClient extends MailClient {
 			rsaCipherEnc.init(Cipher.ENCRYPT_MODE, userBpublicKey);
 			//enkripcija
 			byte [] encSecretKey = rsaCipherEnc.doFinal(secretKey.getEncoded());
+			
+			//potpisivanje body-ja
+			SignatureManager signatureManager = new SignatureManager();
+			byte[] signature = signatureManager.sign(body.getBytes(), getUserAprivateKey());
 
 			// Priprema maila
-			MailBody mailBody = new MailBody(ciphertext, ivParameterSubject.getIV(), ivParameterBody.getIV(), encSecretKey);
+			MailBody mailBody = new MailBody(ciphertext, ivParameterSubject.getIV(), ivParameterBody.getIV(), encSecretKey, signature);
 			String mailBodyCSV = mailBody.toCSV();
         	MimeMessage mimeMessage = MailHelper.createMimeMessage(reciever, ciphersubjectStr, mailBodyCSV);
         	
@@ -125,5 +132,18 @@ public class WriteMailClient extends MailClient {
 		Certificate cer = ksInstanca.getCertificate("userb");
 		//citanje javnog kljuca usera B iz sertifikata
 		return cer.getPublicKey();
+	}
+	
+	private static PrivateKey getUserAprivateKey() throws UnrecoverableKeyException, KeyStoreException, NoSuchAlgorithmException, 
+													CertificateException, FileNotFoundException, IOException, NoSuchProviderException {
+		
+		//kreiranje keystore instance
+		KeyStore ksInst = KeyStore.getInstance("JKS", "SUN");
+		//inicijalizacija keystore instance
+		File file = new File("./data/usera.jks");
+		ksInst.load(new FileInputStream(file), "usera".toCharArray());
+		//citanje privatnog kljuca usera A
+		return (PrivateKey) ksInst.getKey("usera", "usera".toCharArray());
+	
 	}
 }

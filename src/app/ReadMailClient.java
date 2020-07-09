@@ -13,7 +13,9 @@ import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.security.UnrecoverableKeyException;
+import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.spec.InvalidKeySpecException;
 import java.util.ArrayList;
@@ -34,6 +36,7 @@ import com.google.api.services.gmail.Gmail;
 import com.google.api.services.gmail.model.Message;
 
 import model.mailclient.MailBody;
+import signature.SignatureManager;
 import support.MailHelper;
 import support.MailReader;
 import util.GzipUtil;
@@ -91,6 +94,7 @@ public class ReadMailClient extends MailClient {
 		byte[] IV1 = mailBody.getIV1Bytes();
 		byte[] IV2 = mailBody.getIV2Bytes();
 		byte[] encSecretKey = mailBody.getEncKeyBytes();
+		byte[] signature = mailBody.getSignatureBytes();
 		
 		//dekripcija tajnog kljuca
 		SecretKey secretKey = decryptSecretKey(encSecretKey);
@@ -100,8 +104,16 @@ public class ReadMailClient extends MailClient {
 		// Dekriptivanje subject-a i body-ja
 		String subject = decryptSubject(des3CipherDec, secretKey, chosenMessage.getSubject(), IV1);
 		String body = decryptBody(des3CipherDec, secretKey, encBody, IV2);
-		System.out.println("Subject text: " + new String(subject));
-		System.out.println("Body text: " + body);
+		
+		//validacija signature-a
+		SignatureManager signatureManager = new SignatureManager();
+		boolean isSignatureValid = signatureManager.verify(body.getBytes(), signature, getUserApublicKey());
+		if (isSignatureValid) {
+			System.out.println("Subject text: " + new String(subject));
+			System.out.println("Body text: " + body);
+		}else {
+			System.out.println("Signature is not valid");
+		}
 	}
 	
 	private static String decryptBody(Cipher des3CipherDec, SecretKey secretKey, byte[] encBody, byte[] IV2) 
@@ -149,5 +161,19 @@ public class ReadMailClient extends MailClient {
 		
 		SecretKey secretKey = new SecretKeySpec(decSecretKey, "DESede");
 		return secretKey;	
+	}
+	
+	private static PublicKey getUserApublicKey() throws KeyStoreException, NoSuchProviderException, 
+	NoSuchAlgorithmException, CertificateException, FileNotFoundException, IOException {
+		
+		//kreiranje keystore instance
+		KeyStore ksInstanca = KeyStore.getInstance("JKS", "SUN");
+		//inicijalizacija keystore instance
+		File file = new File("./data/userb.jks");
+		ksInstanca.load(new FileInputStream(file), "userb".toCharArray());
+		//citanje sertifikata iz keystore-a
+		Certificate cer = ksInstanca.getCertificate("usera");
+		//citanje javnog kljuca usera A iz sertifikata
+		return cer.getPublicKey();
 	}
 }

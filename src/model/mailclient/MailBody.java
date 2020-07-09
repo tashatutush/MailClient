@@ -116,6 +116,7 @@ public class MailBody {
 	}
 	
 	public byte[] getSignatureBytes() {
-		return Base64.decode(signature);
+		return java.util.Base64.getMimeDecoder().decode(signature);
+//		return Base64.decode(signature);
 	}
 }
