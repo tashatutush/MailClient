@@ -8,7 +8,7 @@ public class IVHelper {
 
 	public static IvParameterSpec createIV() {
 		
-		byte[] iv1 = new byte[16];
+		byte[] iv1 = new byte[8];
 		SecureRandom sr = new SecureRandom();
 		sr.nextBytes(iv1);
 		IvParameterSpec ivParameterSpec = new IvParameterSpec(iv1);

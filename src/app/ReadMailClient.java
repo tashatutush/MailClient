@@ -95,38 +95,38 @@ public class ReadMailClient extends MailClient {
 		//dekripcija tajnog kljuca
 		SecretKey secretKey = decryptSecretKey(encSecretKey);
 		
-		Cipher aesCipherDec = Cipher.getInstance("AES/CBC/PKCS5Padding");
+		Cipher des3CipherDec = Cipher.getInstance("DESede/CBC/PKCS5Padding");
 		
 		// Dekriptivanje subject-a i body-ja
-		String subject = decryptSubject(aesCipherDec, secretKey, chosenMessage.getSubject(), IV1);
-		String body = decryptBody(aesCipherDec, secretKey, encBody, IV2);
+		String subject = decryptSubject(des3CipherDec, secretKey, chosenMessage.getSubject(), IV1);
+		String body = decryptBody(des3CipherDec, secretKey, encBody, IV2);
 		System.out.println("Subject text: " + new String(subject));
 		System.out.println("Body text: " + body);
 	}
 	
-	private static String decryptBody(Cipher aesCipherDec, SecretKey secretKey, byte[] encBody, byte[] IV2) 
+	private static String decryptBody(Cipher des3CipherDec, SecretKey secretKey, byte[] encBody, byte[] IV2) 
 			throws IOException, IllegalBlockSizeException, BadPaddingException, MessagingException, InvalidKeyException, InvalidAlgorithmParameterException {
 		
 		IvParameterSpec ivParameterBody = new IvParameterSpec(IV2);
 		
 		//Inicijalizacija za dekriptovanje
-		aesCipherDec.init(Cipher.DECRYPT_MODE, secretKey, ivParameterBody);
+		des3CipherDec.init(Cipher.DECRYPT_MODE, secretKey, ivParameterBody);
 		
-		String receivedBodyTxt = new String(aesCipherDec.doFinal(encBody));
+		String receivedBodyTxt = new String(des3CipherDec.doFinal(encBody));
 		String decompressedBodyText = GzipUtil.decompress(Base64.decodeBase64(receivedBodyTxt));
 		return decompressedBodyText;
 	}
 	
-	private static String decryptSubject(Cipher aesCipherDec, SecretKey secretKey, String subjectEnc, byte[] IV1) 
+	private static String decryptSubject(Cipher des3CipherDec, SecretKey secretKey, String subjectEnc, byte[] IV1) 
 			throws InvalidKeyException, InvalidAlgorithmParameterException, IllegalBlockSizeException, BadPaddingException, IOException {
 		
 		IvParameterSpec ivParameterSubject = new IvParameterSpec(IV1);
 		
 		//inicijalizacija za dekriptovanje
-		aesCipherDec.init(Cipher.DECRYPT_MODE, secretKey, ivParameterSubject);
+		des3CipherDec.init(Cipher.DECRYPT_MODE, secretKey, ivParameterSubject);
 		
 		//dekompresovanje i dekriptovanje subject-a
-		String decryptedSubjectTxt = new String(aesCipherDec.doFinal(Base64.decodeBase64(subjectEnc)));
+		String decryptedSubjectTxt = new String(des3CipherDec.doFinal(Base64.decodeBase64(subjectEnc)));
 		String decompressedSubjectTxt = GzipUtil.decompress(Base64.decodeBase64(decryptedSubjectTxt));
 		return decompressedSubjectTxt;
 	}
@@ -147,7 +147,7 @@ public class ReadMailClient extends MailClient {
 		rsaCipherDec.init(Cipher.DECRYPT_MODE, prKey);
 		byte[] decSecretKey = rsaCipherDec.doFinal(encSecretKey);
 		
-		SecretKey secretKey = new SecretKeySpec(decSecretKey, "AES");
+		SecretKey secretKey = new SecretKeySpec(decSecretKey, "DESede");
 		return secretKey;	
 	}
 }

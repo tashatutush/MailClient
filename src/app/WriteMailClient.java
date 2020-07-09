@@ -51,17 +51,17 @@ public class WriteMailClient extends MailClient {
             String body = reader.readLine();
 
             //Key generation
-            KeyGenerator keyGen = KeyGenerator.getInstance("AES"); 
+            KeyGenerator keyGen = KeyGenerator.getInstance("DESede"); 
 			SecretKey secretKey = keyGen.generateKey();
-			Cipher aesCipherEnc = Cipher.getInstance("AES/CBC/PKCS5Padding");
+			Cipher des3CipherEnc = Cipher.getInstance("DESede/CBC/PKCS5Padding");
 			
 			// kreiranje inicijalizacionih vektora
 			IvParameterSpec ivParameterSubject = IVHelper.createIV();
 			IvParameterSpec ivParameterBody = IVHelper.createIV();
 			
 			// Enkripcija subject-a i body-ja
-			String ciphersubjectStr = encryptSubject(ivParameterSubject, subject, aesCipherEnc, secretKey);
-			byte[] ciphertext = encryptBody(ivParameterBody, body, aesCipherEnc, secretKey);
+			String ciphersubjectStr = encryptSubject(ivParameterSubject, subject, des3CipherEnc, secretKey);
+			byte[] ciphertext = encryptBody(ivParameterBody, body, des3CipherEnc, secretKey);
 			
 			//dobavljanje javnog kljuca usera B
 			PublicKey userBpublicKey = getUserBpublicKey();
@@ -86,30 +86,30 @@ public class WriteMailClient extends MailClient {
 		}
 	}
 	
-	private static byte[] encryptBody(IvParameterSpec ivParameterBody, String body, Cipher aesCipherEnc, SecretKey secretKey) 
+	private static byte[] encryptBody(IvParameterSpec ivParameterBody, String body, Cipher des3CipherEnc, SecretKey secretKey) 
 			throws IOException, InvalidKeyException, InvalidAlgorithmParameterException, IllegalBlockSizeException, BadPaddingException {
 		
 		// Kompresija i enkodovanje
 		String compressedBody = Base64.encodeToString(GzipUtil.compress(body));
 		
 		//inicijalizacija za sifrovanje 
-		aesCipherEnc.init(Cipher.ENCRYPT_MODE, secretKey, ivParameterBody);
+		des3CipherEnc.init(Cipher.ENCRYPT_MODE, secretKey, ivParameterBody);
 		
 		//sifrovanje
-		return aesCipherEnc.doFinal(compressedBody.getBytes());
+		return des3CipherEnc.doFinal(compressedBody.getBytes());
 
 	}
 	
-	private static String encryptSubject(IvParameterSpec ivParameterSubject, String subject, Cipher aesCipherEnc, SecretKey secretKey) 
+	private static String encryptSubject(IvParameterSpec ivParameterSubject, String subject, Cipher des3CipherEnc, SecretKey secretKey) 
 			throws IOException, InvalidKeyException, InvalidAlgorithmParameterException, IllegalBlockSizeException, BadPaddingException {
 		
 		// Kompresija i enkodovanje
 		String compressedSubject = Base64.encodeToString(GzipUtil.compress(subject));
 		
 		//inicijalizacija za sifrovanje 
-		aesCipherEnc.init(Cipher.ENCRYPT_MODE, secretKey, ivParameterSubject);
+		des3CipherEnc.init(Cipher.ENCRYPT_MODE, secretKey, ivParameterSubject);
 		
-		byte[] ciphersubject = aesCipherEnc.doFinal(compressedSubject.getBytes());
+		byte[] ciphersubject = des3CipherEnc.doFinal(compressedSubject.getBytes());
 		return Base64.encodeToString(ciphersubject);
 	}
 	
