@@ -107,13 +107,19 @@ public class ReadMailClient extends MailClient {
 		
 		//validacija signature-a
 		SignatureManager signatureManager = new SignatureManager();
-		boolean isSignatureValid = signatureManager.verify(body.getBytes(), signature, getUserApublicKey());
+		byte[] data = body.getBytes();
+		
+		boolean isSignatureValid = signatureManager.verify(data, signature, getUserApublicKey());
 		if (isSignatureValid) {
 			System.out.println("Subject text: " + new String(subject));
 			System.out.println("Body text: " + body);
 		}else {
 			System.out.println("Signature is not valid");
 		}
+		
+		data = "Ovo je neki izmenjen body".getBytes();
+		isSignatureValid = signatureManager.verify(data, signature, getUserApublicKey());
+		System.out.println("Detektovanje neregularne poruke sa izmenjenim sadrzajem. Da li je sad potpis validan? " + isSignatureValid );
 	}
 	
 	private static String decryptBody(Cipher des3CipherDec, SecretKey secretKey, byte[] encBody, byte[] IV2) 
