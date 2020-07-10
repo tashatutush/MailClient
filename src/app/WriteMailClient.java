@@ -6,6 +6,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.StringWriter;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.KeyStore;
@@ -25,6 +26,7 @@ import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.IvParameterSpec;
 import javax.mail.internet.MimeMessage;
+import javax.xml.bind.JAXB;
 
 import com.google.api.services.gmail.Gmail;
 
@@ -82,8 +84,13 @@ public class WriteMailClient extends MailClient {
 
 			// Priprema maila
 			MailBody mailBody = new MailBody(ciphertext, ivParameterSubject.getIV(), ivParameterBody.getIV(), encSecretKey, signature);
-			String mailBodyCSV = mailBody.toCSV();
-        	MimeMessage mimeMessage = MailHelper.createMimeMessage(reciever, ciphersubjectStr, mailBodyCSV);
+			
+			StringWriter sw = new StringWriter();
+			JAXB.marshal(mailBody, sw);
+			String xmlMailBody = sw.toString();
+			
+//			String mailBodyCSV = mailBody.toCSV();
+        	MimeMessage mimeMessage = MailHelper.createMimeMessage(reciever, ciphersubjectStr, xmlMailBody);
         	
 			//slanje maila
         	MailWritter.sendMessage(service, "me", mimeMessage);

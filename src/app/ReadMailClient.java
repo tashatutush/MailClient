@@ -6,6 +6,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.StringReader;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.KeyStore;
@@ -30,6 +31,7 @@ import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import javax.mail.MessagingException;
 import javax.mail.internet.MimeMessage;
+import javax.xml.bind.JAXB;
 
 import com.google.api.client.repackaged.org.apache.commons.codec.binary.Base64;
 import com.google.api.services.gmail.Gmail;
@@ -88,8 +90,10 @@ public class ReadMailClient extends MailClient {
 		MimeMessage chosenMessage = mimeMessages.get(answer);
 	    
 		//preuzimanje enkriptovane poruke
-		String mailBodyCSV = MailHelper.getText(chosenMessage);
-		MailBody mailBody = new MailBody(mailBodyCSV);
+		String xmlMailBody = MailHelper.getText(chosenMessage);
+		MailBody mailBody = JAXB.unmarshal(new StringReader(xmlMailBody), MailBody.class);
+//		String mailBodyCSV = MailHelper.getText(chosenMessage);
+//		MailBody mailBody = new MailBody(mailBodyCSV);
 		byte[] encBody = mailBody.getEncMessageBytes();
 		byte[] IV1 = mailBody.getIV1Bytes();
 		byte[] IV2 = mailBody.getIV2Bytes();

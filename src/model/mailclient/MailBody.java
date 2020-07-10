@@ -1,15 +1,33 @@
 package model.mailclient;
 
+import javax.xml.bind.annotation.XmlElement;
+import javax.xml.bind.annotation.XmlRootElement;
+
 import util.Base64;
 
+@XmlRootElement
 public class MailBody {
 	
+	@XmlElement
 	private String encMessage;
+	
+	@XmlElement
 	private String IV1;
+	
+	@XmlElement
 	private String IV2;
+	
+	@XmlElement
 	private String encKey;
+	
+	@XmlElement
 	private String signature;
 	
+	
+	public MailBody() {
+		super();
+	}
+
 	public MailBody(String encMessage, String iV1, String iV2, String encKey) {
 		super();
 		this.encMessage = encMessage;
